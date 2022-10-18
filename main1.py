@@ -36,7 +36,7 @@ def main():
 #   Parameters
 
     M = 5 #number of bins for historgram
-    csv_file = pd.read_csv('LeNet_rotations/overlap.csv')
+    csv_file = pd.read_csv('CN4_rotations/overlap.csv')
     
     
     
@@ -57,7 +57,7 @@ def main():
         softmax_probs[i] = (1 - float(temp.split()[0]))
         i += 1
     print(softmax_probs)
-        
+    
 #Bin data
     
     binned_data = np.digitize(softmax_probs, bins)
@@ -72,24 +72,41 @@ def main():
         if target[i] == 1:
             bin_array[b-1][0] += 1 #total classified in bin
         i += 1
-    
-    i=0
-    for arr in bin_array:
-        bin_array[i,2] = bin_array[i,0]/bin_array[i,1]
-        i+=1
+        total_datapoints=i
         
-    print(bin_array)
+    confidence_array = np.zeros(M)
+    idx=0
+    for b in binned_data:
+        confidence_array[b-1]+=softmax_probs[idx]
+        idx+=1
+    accuracy = bin_array[:,2]
+    i=0
+    ECE=0
+    for arr in bin_array:
+        accuracy[i] = bin_array[i,0]/bin_array[i,1]
+        confidence_array[i] /= bin_array[i,1]
+        ECE+=(bin_array[i,1]/total_datapoints)*abs(bin_array[i,2]-confidence_array[i])
+        i+=1
+    ECE = np.format_float_positional(ECE, precision=4)
+    print(type(ECE))
     
     bins = bins + 1/(2*M) #shift each bin so that it is central
     plt.subplot(111)
     plt.plot(bins[:M], bin_array[:M, 2])
     
-    
     x = np.linspace(0,1,10)
     y =np.linspace(0,1,10)
     plt.plot(x,y)
     plt.grid
+    plt.title("Model Calibration Plot: Lenet Test")
+    plt.xlabel("Confidence")
+    plt.ylabel("Accuracy")
+    textstr = ("ECE =  " + ECE)
+    props = dict(boxstyle='square', facecolor='silver', alpha=0.5)
+    plt.text(0.05, 0.95, textstr, fontsize=14,
+        verticalalignment='top', bbox=props)
     plt.show()
+    plt.savefig("calibration_plot_CN4_test")
     
     return
 
