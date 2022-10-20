@@ -85,8 +85,10 @@ def main():
         accuracy[i] = classifications[i]/bin_sizes[i]
         uncertainty[i] /= bin_sizes[i]
         confidence[i] /= bin_sizes[i]
+        error[i] = 1 - accuracy[i]
         ECE += (bin_sizes[i]/total_datapoints)*abs(accuracy[i] - confidence[i])
         i+=1
+        UCE += (bin_sizes[i]/total_datapoints)*abs(error[i] - uncertainty[i])
     print(uncertainty)
         
 #Format ECE and UCE, then plot graphs
@@ -109,6 +111,7 @@ def main():
     plt.text(0.05, 0.95, textstr, fontsize=14,
         verticalalignment='top', bbox=props)
     plt.show()
+    
     
     return
 
