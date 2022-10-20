@@ -24,4 +24,4 @@ csvfile: 'mirabest_DN16lenet.csv'
 modfile: 'mirabest_DN16lenet.pt'
 
 [metrics]
-outputdir: 'finishedcsv' 
+outputdir: 'models/DN16' 
