@@ -78,9 +78,9 @@ metrics=[]
 
 # load saved model:
 if use_cuda:
-    model.load_state_dict(torch.load(modelfiles[6]),strict=0)
+    model.load_state_dict(torch.load(modelfiles[0]),strict=0)
 else:
-    model.load_state_dict(torch.load(modelfiles[6], map_location=torch.device('cpu')),strict=0)
+    model.load_state_dict(torch.load(modelfiles[0], map_location=torch.device('cpu')),strict=0)
 
 rows = ['target', 'softmax prob', 'average overlap', 'overlap variance']
                         
