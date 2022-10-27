@@ -44,6 +44,9 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 print("Device: ", device)
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+torch.cuda.empty_cache()
 
 # -----------------------------------------------------------------------------
 # load data set:
@@ -78,15 +81,20 @@ metrics=[]
 
 # load saved model:
 if use_cuda:
-    model.load_state_dict(torch.load(modelfiles[0]),strict=0)
+    #model.load_state_dict(torch.load(modelfiles[6]),strict=0)
+    state_dict = torch.load(modelfiles[0], map_location='cpu')
+    model.load_state_dict(state_dict, strict=0)
+    model.to(device)
 else:
     model.load_state_dict(torch.load(modelfiles[0], map_location=torch.device('cpu')),strict=0)
 
-rows = ['target', 'softmax prob', 'average overlap', 'overlap variance']
+rows = ['target', 'softmax prob', 'classification error %', 'average overlap', 'overlap variance']
                         
 with open(csvfile, 'a', newline="") as f_out:
         writer = csv.writer(f_out, delimiter=',')
         writer.writerow(rows)
+
+print('There are ',N,' data files')
 
 for i in range(0,N):
 
@@ -102,11 +110,11 @@ for i in range(0,N):
     x = model(data)
     p = F.softmax(x,dim=1)[0].detach().cpu().numpy()
     
-    av_overlap, std_overlap = fr_rotation_test(model, data, target, i, device)
+    av_overlap, std_overlap, class_error = fr_rotation_test(model, data, target, i, device)
     print(i, av_overlap, std_overlap)
     
     # create output row:
-    _results = [target[0].item(), p, av_overlap, std_overlap]
+    _results = [target[0].item(), p, class_error, av_overlap, std_overlap]
     
     with open(csvfile, 'a', newline="") as f_out:
         writer = csv.writer(f_out, delimiter=',')

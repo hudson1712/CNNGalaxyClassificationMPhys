@@ -181,14 +181,17 @@ def fr_rotation_test(model, data, target, idx, device):
     
     T = 100
     rotation_list = range(0, 180, 20)
+    #rotation_list = [0]
     #print("True classification: ",target[0].item())
     
     image_list = []
     outp_list = []
     inpt_list = []
+    
+    misclassifications = 0
+    
     for r in rotation_list:
-        
-        # make rotated image:
+    # make rotated image:
         rotation_matrix = torch.Tensor([[[np.cos(r/360.0*2*np.pi), -np.sin(r/360.0*2*np.pi), 0],
                                          [np.sin(r/360.0*2*np.pi), np.cos(r/360.0*2*np.pi), 0]]]).to(device)
         grid = F.affine_grid(rotation_matrix, data.size(), align_corners=True)
@@ -198,25 +201,33 @@ def fr_rotation_test(model, data, target, idx, device):
         # get straight prediction:
         model.eval()
         x = model(data_rotate)
-        p = F.softmax(x,dim=1)
+        
                                          
         # run 100 stochastic forward passes:
         model.enable_dropout()
         output_list, input_list = [], []
         for i in range(T):
             x = model(data_rotate)
+            p = F.softmax(x,dim=1)
             input_list.append(torch.unsqueeze(x, 0).cpu())
-            output_list.append(torch.unsqueeze(F.softmax(x,dim=1), 0).cpu())
-                                         
+            output_list.append(torch.unsqueeze(p, 0).cpu())
+            
+            if (target[0] == 0) and (p[0,1] >= 0.5):
+                misclassifications += 1
+            if (target[0] == 1) and (p[0,1] < 0.5):
+                misclassifications += 1
+            
+            
         # calculate the mean output for each target:
         output_mean = np.squeeze(torch.cat(output_list, 0).mean(0).data.cpu().numpy())
                                              
         # append per rotation output into list:
         outp_list.append(np.squeeze(torch.cat(output_list, 0).data.numpy()))
         inpt_list.append(np.squeeze(torch.cat(input_list, 0).data.numpy()))
-
-        #print ('rotation degree', str(r), 'Predict : {} - {}'.format(output_mean.argmax(),output_mean))
-
+        
+    error = misclassifications / (T * len(rotation_list))
+    #print ('rotation degree', str(r), 'Predict : {} - {}'.format(output_mean.argmax(),output_mean))
+    
     preds = np.array([0,1])
     classes = np.array(["FRI","FRII"])
     
@@ -224,10 +235,10 @@ def fr_rotation_test(model, data, target, idx, device):
     inpt_list = np.array(inpt_list)
     rotation_list = np.array(rotation_list)
 
-    colours=["b","r"]
+    # colours=["b","r"]
 
-    #fig1, (a0, a1) = pl.subplots(2, 1, gridspec_kw={'height_ratios': [8,1]})
-    fig2, (a2, a3) = pl.subplots(2, 1, gridspec_kw={'height_ratios': [8,1]})
+    # #fig1, (a0, a1) = pl.subplots(2, 1, gridspec_kw={'height_ratios': [8,1]})
+    # fig2, (a2, a3) = pl.subplots(2, 1, gridspec_kw={'height_ratios': [8,1]})
 
     eta = np.zeros(len(rotation_list))
     for i in range(len(rotation_list)):
@@ -235,54 +246,54 @@ def fr_rotation_test(model, data, target, idx, device):
         y = outp_list[i,:,1]
         eta[i] = overlapping(x, y)
 
-    #a0.set_title("Input")
-    if np.mean(eta)>=0.01:
-        a2.set_title(r"$\langle \eta \rangle = $ {:.2f}".format(np.mean(eta)))
-    else:
-        a2.set_title(r"$\langle \eta \rangle < 0.01$")
+    # #a0.set_title("Input")
+    # if np.mean(eta)>=0.01:
+    #     a2.set_title(r"$\langle \eta \rangle = $ {:.2f}".format(np.mean(eta)))
+    # else:
+    #     a2.set_title(r"$\langle \eta \rangle < 0.01$")
 
-    dx = 0.8*(rotation_list[1]-rotation_list[0])
-    for pred in preds:
-        col = colours[pred]
-        #a0.plot(rotation_list[0],inpt_list[0,0,pred],marker=",",c=col,label=str(pred))
-        a2.plot(rotation_list[0],outp_list[0,0,pred],marker=",",c=col,label=classes[pred])
-        for i in range(rotation_list.shape[0]):
-        #    make_linemarker(rotation_list[i],inpt_list[i,:,pred],dx,col,a0)
-            make_linemarker(rotation_list[i],outp_list[i,:,pred],dx,col,a2)
+    # #dx = 0.8*(rotation_list[1]-rotation_list[0])
+    # for pred in preds:
+    #     col = colours[pred]
+    #     #a0.plot(rotation_list[0],inpt_list[0,0,pred],marker=",",c=col,label=str(pred))
+    #     a2.plot(rotation_list[0],outp_list[0,0,pred],marker=",",c=col,label=classes[pred])
+    #     #for i in range(rotation_list.shape[0]):
+    #     #    make_linemarker(rotation_list[i],inpt_list[i,:,pred],dx,col,a0)
+    #         #make_linemarker(rotation_list[i],outp_list[i,:,pred],dx,col,a2)
         
-    #a2.plot(rotation_list, eta)
+    # #a2.plot(rotation_list, eta)
     
-    #a0.legend()
-    a2.legend(loc='center right')
-    #a0.axis([0,180,0,1])
-    #a0.set_xlabel("Rotation [deg]")
-    a2.set_xlabel("Rotation [deg]")
-    #a1.axis([0,180,0,1])
-    a3.axis([0,180,0,1])
-    #a1.axis('off')
-    a3.axis('off')
+    # #a0.legend()
+    # a2.legend(loc='center right')
+    # #a0.axis([0,180,0,1])
+    # #a0.set_xlabel("Rotation [deg]")
+    # a2.set_xlabel("Rotation [deg]")
+    # #a1.axis([0,180,0,1])
+    # a3.axis([0,180,0,1])
+    # #a1.axis('off')
+    # a3.axis('off')
     
-    imsize = data.size()[2]
-    mask = build_mask(imsize, margin=1)
+    # imsize = data.size()[2]
+    # mask = build_mask(imsize, margin=1)
             
-    for i in range(len(rotation_list)):
-        inc = 0.5*(180./len(rotation_list))
-        #positionimage(rotation_list[i]+inc, 0., a1, image_list[i][0, 0, :, :].data.numpy(), zoom=0.32)
-        positionimage(rotation_list[i]+inc, 0., a3, mask[0,0,:,:]*image_list[i][0, 0, :, :].data.cpu().numpy(), zoom=0.32)
+    # for i in range(len(rotation_list)):
+    #     inc = 0.5*(180./len(rotation_list))
+    #     #positionimage(rotation_list[i]+inc, 0., a1, image_list[i][0, 0, :, :].data.numpy(), zoom=0.32)
+    #     positionimage(rotation_list[i]+inc, 0., a3, mask[0,0,:,:]*image_list[i][0, 0, :, :].data.cpu().numpy(), zoom=0.32)
         
     
-    #fig1.tight_layout()
-    fig2.tight_layout()
+    # #fig1.tight_layout()
+    # fig2.tight_layout()
 
-    #fig1.subplots_adjust(bottom=0.15)
-    fig2.subplots_adjust(bottom=0.15)
+    # #fig1.subplots_adjust(bottom=0.15)
+    # fig2.subplots_adjust(bottom=0.15)
 
-    #pl.show()
-    fig2.savefig("./rotations/rotationtest_"+str(idx)+".png")
+    # #pl.show()
+    # fig2.savefig("./rotations/rotationtest_"+str(idx)+".png")
     
-    pl.close()
+    # pl.close()
     
-    return np.mean(eta), np.std(eta)
+    return np.mean(eta), np.std(eta), error
 
 # -----------------------------------------------------------------------------
 
