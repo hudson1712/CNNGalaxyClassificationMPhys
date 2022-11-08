@@ -187,7 +187,7 @@ def fr_rotation_test(model, data, target, idx, device):
     image_list = []
     outp_list = []
     inpt_list = []
-    
+    softmaxs = []
     misclassifications = 0
     
     for r in rotation_list:
@@ -220,7 +220,9 @@ def fr_rotation_test(model, data, target, idx, device):
             
         # calculate the mean output for each target:
         output_mean = np.squeeze(torch.cat(output_list, 0).mean(0).data.cpu().numpy())
-                                             
+        
+        softmaxs.append(output_mean[0])
+        
         # append per rotation output into list:
         outp_list.append(np.squeeze(torch.cat(output_list, 0).data.numpy()))
         inpt_list.append(np.squeeze(torch.cat(input_list, 0).data.numpy()))
@@ -234,6 +236,7 @@ def fr_rotation_test(model, data, target, idx, device):
     outp_list = np.array(outp_list)
     inpt_list = np.array(inpt_list)
     rotation_list = np.array(rotation_list)
+    entropy = calc_entropy(softmaxs)
 
     # colours=["b","r"]
 
@@ -293,9 +296,18 @@ def fr_rotation_test(model, data, target, idx, device):
     
     # pl.close()
     
-    return np.mean(eta), np.std(eta), error
+    return np.mean(eta), np.std(eta), error, entropy
 
 # -----------------------------------------------------------------------------
+
+def calc_entropy(softmax_probs):
+    
+    entropy = -np.mean(softmax_probs)*np.log(np.mean(softmax_probs))
+    entropy /= np.log(2)
+    
+    return entropy
+
+#------------------------------------------------------------------------------
 
 def overlapping(x, y, beta=0.1):
 

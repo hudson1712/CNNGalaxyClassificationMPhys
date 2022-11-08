@@ -18,6 +18,9 @@ from MiraBest import MBFRConfident
 
 # -----------------------------------------------------------------------------
 # extract information from config file:
+    
+use_entropy = True
+    
 
 vars = parse_args()
 config_dict, config = parse_config(vars['config'])
@@ -88,8 +91,12 @@ if use_cuda:
 else:
     model.load_state_dict(torch.load(modelfiles[0], map_location=torch.device('cpu')),strict=0)
 
-rows = ['target', 'softmax prob', 'classification error %', 'average overlap', 'overlap variance']
-                        
+
+if(use_entropy):
+    rows = ['target', 'softmax prob', 'classification error %', 'predictive entropy']
+else:
+    rows = ['target', 'softmax prob', 'classification error %', 'average overlap', 'overlap variance']  
+            
 with open(csvfile, 'a', newline="") as f_out:
         writer = csv.writer(f_out, delimiter=',')
         writer.writerow(rows)
@@ -110,11 +117,15 @@ for i in range(0,N):
     x = model(data)
     p = F.softmax(x,dim=1)[0].detach().cpu().numpy()
     
-    av_overlap, std_overlap, class_error = fr_rotation_test(model, data, target, i, device)
+    av_overlap, std_overlap, class_error, entropy = fr_rotation_test(model, data, target, i, device)
+    
     print(i, av_overlap, std_overlap)
     
     # create output row:
-    _results = [target[0].item(), p, class_error, av_overlap, std_overlap]
+    if(use_entropy):
+        _results = [target[0].item(), p, class_error, entropy]
+    else:
+        _results = [target[0].item(), p, class_error, av_overlap, std_overlap]
     
     with open(csvfile, 'a', newline="") as f_out:
         writer = csv.writer(f_out, delimiter=',')
