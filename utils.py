@@ -239,71 +239,24 @@ def fr_rotation_test(model, data, target, idx, device):
     outp_list = np.array(outp_list)
     inpt_list = np.array(inpt_list)
     rotation_list = np.array(rotation_list)
+    
+    
+    
     predictive_entropy = calc_entropy(softmaxs)
     average_entropy = calc_avg_entropy(outp_list, target[0], (T*len(rotation_list)))
     mutual_information = predictive_entropy - average_entropy
     
-    # colours=["b","r"]
-
-    # #fig1, (a0, a1) = pl.subplots(2, 1, gridspec_kw={'height_ratios': [8,1]})
-    # fig2, (a2, a3) = pl.subplots(2, 1, gridspec_kw={'height_ratios': [8,1]})
-
+    
+    
     eta = np.zeros(len(rotation_list))
     for i in range(len(rotation_list)):
         x = outp_list[i,:,0]
         y = outp_list[i,:,1]
         eta[i] = overlapping(x, y)
-
-    # #a0.set_title("Input")
-    # if np.mean(eta)>=0.01:
-    #     a2.set_title(r"$\langle \eta \rangle = $ {:.2f}".format(np.mean(eta)))
-    # else:
-    #     a2.set_title(r"$\langle \eta \rangle < 0.01$")
-
-    # #dx = 0.8*(rotation_list[1]-rotation_list[0])
-    # for pred in preds:
-    #     col = colours[pred]
-    #     #a0.plot(rotation_list[0],inpt_list[0,0,pred],marker=",",c=col,label=str(pred))
-    #     a2.plot(rotation_list[0],outp_list[0,0,pred],marker=",",c=col,label=classes[pred])
-    #     #for i in range(rotation_list.shape[0]):
-    #     #    make_linemarker(rotation_list[i],inpt_list[i,:,pred],dx,col,a0)
-    #         #make_linemarker(rotation_list[i],outp_list[i,:,pred],dx,col,a2)
-        
-    # #a2.plot(rotation_list, eta)
-    
-    # #a0.legend()
-    # a2.legend(loc='center right')
-    # #a0.axis([0,180,0,1])
-    # #a0.set_xlabel("Rotation [deg]")
-    # a2.set_xlabel("Rotation [deg]")
-    # #a1.axis([0,180,0,1])
-    # a3.axis([0,180,0,1])
-    # #a1.axis('off')
-    # a3.axis('off')
-    
-    # imsize = data.size()[2]
-    # mask = build_mask(imsize, margin=1)
-            
-    # for i in range(len(rotation_list)):
-    #     inc = 0.5*(180./len(rotation_list))
-    #     #positionimage(rotation_list[i]+inc, 0., a1, image_list[i][0, 0, :, :].data.numpy(), zoom=0.32)
-    #     positionimage(rotation_list[i]+inc, 0., a3, mask[0,0,:,:]*image_list[i][0, 0, :, :].data.cpu().numpy(), zoom=0.32)
-        
-    
-    # #fig1.tight_layout()
-    # fig2.tight_layout()
-
-    # #fig1.subplots_adjust(bottom=0.15)
-    # fig2.subplots_adjust(bottom=0.15)
-
-    # #pl.show()
-    # fig2.savefig("./rotations/rotationtest_"+str(idx)+".png")
-    
-    # pl.close()
     
     return np.mean(eta), np.std(eta), error, predictive_entropy, average_entropy, mutual_information
 
-# -----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 def calc_entropy(softmax_probs):
     
@@ -316,8 +269,8 @@ def calc_entropy(softmax_probs):
 
 def calc_avg_entropy(softmax_probs, target, N):
     
-    arr = softmax_probs[:,:,1-target].reshape(900)
-    
+    arr = softmax_probs[:,:,target].reshape(900)
+
     entropy = -np.mean(arr*np.log(arr))
     entropy /= np.log(2)
     
