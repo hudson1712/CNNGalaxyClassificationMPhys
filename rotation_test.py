@@ -15,6 +15,7 @@ from utils import *
 from plots import *
 from FRDEEP import FRDEEPF
 from MiraBest import MBFRConfident
+from MiraBest import MBFRUncertain
 
 # -----------------------------------------------------------------------------
 # extract information from config file:
@@ -93,7 +94,7 @@ else:
 
 
 if(use_entropy):
-    rows = ['target', 'softmax prob', 'classification error %', 'predictive entropy']
+    rows = ['target', 'softmax prob', 'classification error %', 'average overlap', 'predictive entropy', 'average entropy', 'mutual information']
 else:
     rows = ['target', 'softmax prob', 'classification error %', 'average overlap', 'overlap variance']  
             
@@ -117,13 +118,13 @@ for i in range(0,N):
     x = model(data)
     p = F.softmax(x,dim=1)[0].detach().cpu().numpy()
     
-    av_overlap, std_overlap, class_error, entropy = fr_rotation_test(model, data, target, i, device)
+    av_overlap, std_overlap, class_error, p_entropy, a_entropy, mi = fr_rotation_test(model, data, target, i, device)
     
     print(i, av_overlap, std_overlap)
     
     # create output row:
     if(use_entropy):
-        _results = [target[0].item(), p, class_error, entropy]
+        _results = [target[0].item(), p, class_error, av_overlap, p_entropy, a_entropy, mi]
     else:
         _results = [target[0].item(), p, class_error, av_overlap, std_overlap]
     

@@ -222,9 +222,9 @@ def fr_rotation_test(model, data, target, idx, device):
         output_mean = np.squeeze(torch.cat(output_list, 0).mean(0).data.cpu().numpy())
         
         if (target[0] == 0):
-            softmaxs.append(output_mean[0])
-        if (target[0] == 1):
             softmaxs.append(output_mean[1])
+        if (target[0] == 1):
+            softmaxs.append(output_mean[0])
         
         # append per rotation output into list:
         outp_list.append(np.squeeze(torch.cat(output_list, 0).data.numpy()))
@@ -239,8 +239,10 @@ def fr_rotation_test(model, data, target, idx, device):
     outp_list = np.array(outp_list)
     inpt_list = np.array(inpt_list)
     rotation_list = np.array(rotation_list)
-    entropy = calc_entropy(softmaxs)
-
+    predictive_entropy = calc_entropy(softmaxs)
+    average_entropy = calc_avg_entropy(outp_list, target[0], (T*len(rotation_list)))
+    mutual_information = predictive_entropy - average_entropy
+    
     # colours=["b","r"]
 
     # #fig1, (a0, a1) = pl.subplots(2, 1, gridspec_kw={'height_ratios': [8,1]})
@@ -299,13 +301,24 @@ def fr_rotation_test(model, data, target, idx, device):
     
     # pl.close()
     
-    return np.mean(eta), np.std(eta), error, entropy
+    return np.mean(eta), np.std(eta), error, predictive_entropy, average_entropy, mutual_information
 
 # -----------------------------------------------------------------------------
 
 def calc_entropy(softmax_probs):
     
     entropy = -np.mean(softmax_probs)*np.log(np.mean(softmax_probs))
+    entropy /= np.log(2)
+    
+    return entropy
+
+#------------------------------------------------------------------------------
+
+def calc_avg_entropy(softmax_probs, target, N):
+    
+    arr = softmax_probs[:,:,1-target].reshape(900)
+    
+    entropy = -np.mean(arr*np.log(arr))
     entropy /= np.log(2)
     
     return entropy
