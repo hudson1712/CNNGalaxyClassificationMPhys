@@ -222,9 +222,9 @@ def fr_rotation_test(model, data, target, idx, device):
         output_mean = np.squeeze(torch.cat(output_list, 0).mean(0).data.cpu().numpy())
         
         if (target[0] == 0):
-            softmaxs.append(output_mean[1])
-        if (target[0] == 1):
             softmaxs.append(output_mean[0])
+        if (target[0] == 1):
+            softmaxs.append(output_mean[1])
         
         # append per rotation output into list:
         outp_list.append(np.squeeze(torch.cat(output_list, 0).data.numpy()))
