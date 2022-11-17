@@ -24,7 +24,7 @@ class VanillaLeNet(nn.Module):
         self.conv2 = nn.Conv2d(6, 16, kernel_size, padding=1)
         self.fc1   = nn.Linear(16*z*z, 120)
         self.fc2   = nn.Linear(120, 84)
-        self.fc3   = nn.Linear(84, out_chan)
+        self.fc3   = nn.utils.spectral_norm(nn.Linear(84, out_chan))
         self.drop  = nn.Dropout(p=0.5)
         
         # dummy parameter for tracking device
@@ -100,7 +100,7 @@ class CNSteerableLeNet(nn.Module):
 
         self.fc1   = nn.Linear(16*z*z, 120)
         self.fc2   = nn.Linear(120, 84)
-        self.fc3   = nn.Linear(84, out_chan)
+        self.fc3   = nn.utils.spectral_norm(nn.Linear(84, out_chan))
         
         self.drop  = nn.Dropout(p=0.5)
         
@@ -180,7 +180,7 @@ class DNSteerableLeNet(nn.Module):
 
         self.fc1   = nn.Linear(16*z*z, 120)
         self.fc2   = nn.Linear(120, 84)
-        self.fc3   = nn.Linear(84, out_chan)
+        self.fc3   = nn.utils.spectral_norm(nn.Linear(84, out_chan))
         
         self.drop  = nn.Dropout(p=0.5)
         
