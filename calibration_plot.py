@@ -36,14 +36,16 @@ def main():
 #Parameters
 
     model_to_plot = 'LeNet'
-    use_entropy = True
-    M = 104 #number of bins for histogram
-    csv_file_0 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_entropy_0.csv')
-    csv_file_1 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_entropy_0_model2.csv')
-    csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_spectral_overlap.csv')
+    use_entropy = 0
+    frequentist = 0
+    M = 13 #number of bins for histogram
+    #csv_file_0 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_entropy_2.csv')
+    csv_file_1 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_spectral_norm.csv')
+    #csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_entropy_2.csv')
+    #csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_overlap_with_err.csv')
     
     #files = [csv_file_0, csv_file_1, csv_file_2]
-    files = [csv_file_2]
+    files = [csv_file_1]
     equal_count_bins = True
     
 #------------------------------------------------------------------------------
@@ -65,9 +67,10 @@ def main():
     
 #Extract data from csv file
 
-    target = csv_file_0["target"].values
+    target = files[0]["target"].values
     total_datapoints = len(target)
     overlap_3 = np.empty([len(files),total_datapoints])
+    errors_3 = np.empty([len(files),total_datapoints])
     
     i=0
     for csv_file in files:
@@ -82,10 +85,16 @@ def main():
             j += 1
         if(use_entropy):
             overlaps_t = csv_file['predictive entropy'].values
+            #overlaps_t /= np.log(2)
         else:
             overlaps_t = csv_file['average overlap'].values
+            #overlaps_t /= max(overlaps_t)
+            
+        #print(max(csv_file['average entropy'].values))
+            
         image_errors = csv_file['classification error %'].values
         
+        errors_3[i] = image_errors
         overlap_3[i] = overlaps_t
         
         i += 1
@@ -95,26 +104,28 @@ def main():
     for i in range(0, total_datapoints):
         overlaps[i] = np.mean(overlap_3[:,i])
         uncert_errs_indiv[i] = np.std(overlap_3[:,i])
-    print(overlap_3)
+        #error_errs[i] = np.std(errors_3[:,i])
+    #print(overlap_3)
     #avg_softmax_probs = 
-    print(overlaps)
-    print(uncert_errs_indiv)
+    #print(overlaps)
+    #print(uncert_errs_indiv)
     
     
     #bin_widths_probs = np.zeros(M)
     #bin_widths_uncert = np.zeros(M)
     #error_target = target
     softmax_probs_sorted = softmax_probs[softmax_probs.argsort()]
-    #accuracy_sorted = 1 - errors[softmax_probs.argsort()]
+    accuracy_sorted = (1 - image_errors[softmax_probs.argsort()])
     #print(accuracy_sorted)
     accuracy_target = target[softmax_probs.argsort()]
     overlap_sorted = overlaps[overlaps.argsort()]
-    overlap_err_sorted = uncert_errs_indiv[overlaps.argsort()]
     image_errors_sorted = image_errors[overlaps.argsort()]
+    #error_errs_sorted = error_errs[overlaps.argsort()]
     
-    #error_target = error_target[overlaps.argsort()]
-    #print(softmax_probs_sorted)
-    #print(overlap_sorted)
+    fr1_err_rate = 0
+    fr2_err_rate = 0
+    #avg_err_rate = np.mean(image_errors)
+    avg_err_rate = 0
     
 #Bin data
 
@@ -145,92 +156,143 @@ def main():
     bins[M-1] = 1
     error_bin_centres[M-1] = (1 - error_bins[M-2])/2 + error_bins[M-2] #set centres of the bins
     bin_centres[M-1] = (1 - bins[M-2])/2 + bins[M-2] 
+    #print(error_bin_centres)
     
     i = 0
     for b in range(M): # actually bin the data
         
         uncerts = np.zeros(bin_count)
-        for j in range(bin_count):
+        error_unc = np.zeros(bin_count)
+        for j in range(0, bin_count):
             
             confidence[b] += softmax_probs_sorted[j + (b)*bin_count] #running total of confidence
             uncertainty[b] += overlap_sorted[j + (b)*bin_count] #running total of uncertainty
             uncerts[j] = overlap_sorted[j + (b)*bin_count]
+            error_unc[j] = image_errors_sorted[j + (b)*bin_count]
             #uncertainty_errs[b] += (overlap_err_sorted[j + (b)*bin_count]/overlap_sorted[j + (b)*bin_count])**2
             
-            if accuracy_target[j + (b)*bin_count] == 1:
-                classifications[b] += 1 #total classified in bin
-                
-            # if error_target[j + (b)*bin_width] == 1:
-            #      error_classifications[b] += 1 #total classified in bin
+            # if accuracy_target[j + (b)*bin_count] == 1:
+            #     classifications[b] += 1 #total classified in bin
+            
         uncertainty_errs[i] = np.std(uncerts)
+        error_errs[i] = np.std(error_unc)
         
         for j in range(bin_count):
-            error_classifications[b] += image_errors_sorted[j + b*bin_count]
+            
+            if image_errors_sorted[j + b*bin_count] >= 0.5:
+                error_classifications[b] += 1 - image_errors_sorted[j + b*bin_count]
+            else:
+                error_classifications[b] += image_errors_sorted[j + b*bin_count]
+            
+                
+            if accuracy_target[j + b*bin_count] == 1:
+                classifications[b] += accuracy_sorted[j + b*bin_count]
+                
+            else:
+                classifications[b] += 1 - accuracy_sorted[j + b*bin_count]
+                
             
         accuracy[i] = classifications[i]/bin_count #average over bin
         uncertainty[i] /= bin_count
+        
         #uncertainty_errs[i] /= (bin_count/uncertainty[i])
         #uncertainty_errs[i] = np.sqrt(uncertainty_errs[i])
         confidence[i] /= bin_count
-        error[i] = error_classifications[i]/bin_count
+        error[i] = error_classifications[i]/bin_count/0.5
         
         
         ECE += (bin_count/total_datapoints)*abs(accuracy[i] - confidence[i])
         UCE += (bin_count/total_datapoints)*abs(error[i] - uncertainty[i])
         
         #Use average value of the bin as the centre
-        bin_centres[i] = confidence[i]
-        error_bin_centres[i] = uncertainty[i]
+        bin_centres[b] = confidence[b]
+        error_bin_centres[b] = uncertainty[b]
 
         i += 1
+        
+        
+    #Calculate class-wise error rates
+    t = 0
+    for x in softmax_probs:
+        err = 1
+        if target[t] == 0 and x >= 0.5:
+            fr1_err_rate += err
+            avg_err_rate += err
+        if target[t] == 1 and x <= 0.5:
+            fr2_err_rate += err
+            avg_err_rate += err
+        t += 1
+        
+    fr1_err_rate /= 49
+    fr2_err_rate /= 55
+    avg_err_rate /= total_datapoints
+    
 #------------------------------------------------------------------------------
     
 #Format ECE and UCE, then plot graphs
-
+    print(max(uncertainty))
     ECE = np.format_float_positional(ECE, precision=4)
     UCE = np.format_float_positional(UCE, precision=4)
     
-    bins = bins + 1/(2*M) #shift each bin so that it is central
-    plt.subplot(111)
-    if(equal_count_bins):
-        plt.scatter(bin_centres[:M], accuracy[:M], marker='x')
-    else:
-        plt.scatter(bins[:M], accuracy[:M], marker='x')
+#Plot ECE graph
+    ax = plt.subplot(111)
+    plt.plot(bin_centres[:M], accuracy[:M], linewidth=1, marker='.', markersize=10)
     
     x = np.linspace(0, 1.0, 10)
     y = np.linspace(0, 1.0, 10)
-    plt.plot(x,y, '--', linewidth=1)
-    plt.grid
+    plt.plot(x,y, '--', linewidth=0.7, color='black')
+    plt.grid(visible=True)
+    ax.spines.right.set_visible(False)
+    ax.spines.top.set_visible(False)
+    ax.spines.left.set_visible(False)
+    ax.spines.bottom.set_visible(False)
+    
     plt.title("Model Calibration Plot: " + model_to_plot + " Test data")
+    # plt.xlim(0,1)
+    # plt.ylim(0,1)
     plt.xlabel("Confidence")
     plt.ylabel("Accuracy")
     textstr = ("ECE =  " + ECE)
     props = dict(boxstyle='square', facecolor='silver', alpha=0.5)
     plt.text(0.05, 0.95, textstr, fontsize=14,
-        verticalalignment='top', bbox=props)
+    verticalalignment='top', bbox=props)
     plt.show()
     
-    plt.subplot(111)
-    if(equal_count_bins):
-        plt.errorbar(error_bin_centres[:M], error[:M], xerr=uncertainty_errs, marker='x', linewidth=1, linestyle='')
-        #plt.errorbar(x, y, )
-    else:
-        plt.scatter(bins[:M], error[:M], marker='x')
     
-    #print(error_bin_centres)
-    #print(error)
+    
+#Plot UCE graph
+    ax = plt.subplot(111)
+    #plt.errorbar(error_bin_centres[:M], error[:M], marker='x', linewidth=1, linestyle='')
+    plt.plot(uncertainty[:M], error[:M], linewidth=1, marker='.', markersize=10)
+    
     x = np.linspace(0,1,10)
     y = np.linspace(0,1,10)
-    plt.plot(x,y, '--',linewidth=1)
-    plt.grid
+    plt.plot(x,y, '--', linewidth=0.7, color='black')
+    plt.grid(visible=True)
+    #plt.xlim(0,1)
+    #plt.ylim(0,1)
+    ax.spines.right.set_visible(False)
+    ax.spines.top.set_visible(False)
+    ax.spines.left.set_visible(False)
+    ax.spines.bottom.set_visible(False)
     plt.title("Model Calibration Plot: " + model_to_plot + " Test data")
-    plt.xlabel("Uncertainty")
+    if use_entropy:
+        plt.xlabel("Uncertainty (predictive entropy)")
+    else:
+        plt.xlabel("Uncertainty (overlap index)")
     plt.ylabel("Error")
     textstr = ("UCE =  " + UCE)
     props = dict(boxstyle='square', facecolor='silver', alpha=0.5)
     plt.text(0.05, 0.95, textstr, fontsize=14,
         verticalalignment='top', bbox=props)
     plt.show()
+    
+#Output extra information
+    
+    print('Average error rate:', avg_err_rate)
+    print('FR I error rate:', fr1_err_rate)
+    print('FR II error rate:', fr2_err_rate)
+    
     
     return
 
