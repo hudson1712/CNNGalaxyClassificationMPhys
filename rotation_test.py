@@ -109,7 +109,7 @@ for i in range(0,N):
     subset_indices = [i] # select your indices here as a list
     subset = torch.utils.data.Subset(test_data, subset_indices)
     testloader_ordered = torch.utils.data.DataLoader(subset, batch_size=1, shuffle=False)
-    data, target = iter(testloader_ordered).next()
+    data, target = next(iter(testloader_ordered))
     
     data = data.to(device)
     
