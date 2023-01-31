@@ -43,6 +43,8 @@ config         = vars['config'].split('/')[-1][:-4]
 # -----------------------------------------------------------------------------
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 #device = 'cpu'
 
 # -----------------------------------------------------------------------------
@@ -56,7 +58,7 @@ normalise= transforms.Normalize((config_dict['data']['datamean'],), (config_dict
 transform = transforms.Compose([
     crop,
     pad,
-    transforms.RandomRotation(360, interpolation=Image.BILINEAR, expand=False),
+    transforms.RandomRotation(360, resample=Image.BILINEAR, expand=False),
     totensor,
     normalise,
 ])

@@ -13,6 +13,7 @@ from torch.utils.data import Subset
 from torchsummary import summary
 
 import numpy as np
+import scipy as sc
 import csv
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -38,16 +39,17 @@ def main():
     models = ['LeNet','C4','C8','C16','D4','D8','D16']
     #models = ['LeNet']
     use_entropy = 1
-    frequentist = 1
-    M = 13 #number of bins for histogram
+    adjust_entropy = 1
+    frequentist = 0
+    M = 26 #number of bins for histogram
     scale_graph = 0
     
     for model_to_plot in models:
         print(model_to_plot)
-        #csv_file_0 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_sn_uncertain.csv')
-        #csv_file_1 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_spectral_norm.csv')
-        csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_entropy_0.csv')
-        #csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_overlap_with_err.csv')
+        #csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_sn_uncertain.csv')
+        #csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_sn_all.csv')
+        #csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_entropy_0.csv')
+        csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_spectral_norm.csv')
         
         #files = [csv_file_0, csv_file_1, csv_file_2]
         files = [csv_file_2]
@@ -74,8 +76,7 @@ def main():
     
         target = files[0]["target"].values
         total_datapoints = len(target)
-        overlap_3 = np.empty([len(files),total_datapoints])
-        errors_3 = np.empty([len(files),total_datapoints])
+        overlaps = np.empty(total_datapoints)
         
         i=0
         for csv_file in files:
@@ -88,34 +89,36 @@ def main():
                 temp = str.strip('[')
                 softmax_probs[j] = (1 - float(temp.split()[0]))
                 j += 1
-            if(use_entropy):
-                overlaps_t = csv_file['predictive entropy'].values
-                #overlaps_t /= np.log(2)
-            else:
-                overlaps_t = csv_file['average overlap'].values
-                #overlaps_t /= max(overlaps_t)
-                
-            #print(max(csv_file['average entropy'].values))
                 
             image_errors = csv_file['classification error %'].values
             
-            errors_3[i] = image_errors
-            overlap_3[i] = overlaps_t
-            
+            if use_entropy:
+                overlaps = csv_file['mutual information'].values
+                
+                if adjust_entropy:
+                    j=0
+                    for y in overlaps:
+                        x = np.exp(sc.special.lambertw(-y))
+                        overlaps[j] -= (1-x)*np.log(1-x)/np.log(2)
+                        j += 1
+            else:
+                overlaps = csv_file['average overlap'].values
+    
             i += 1
+            
+            
+        fr1_err_rate = 0
+        fr2_err_rate = 0
+        #avg_err_rate = np.mean(image_errors)
+        avg_err_rate = 0
         
-        overlaps = np.zeros(total_datapoints)
-        uncert_errs_indiv = np.zeros(total_datapoints)
-        for i in range(0, total_datapoints):
-            overlaps[i] = np.mean(overlap_3[:,i])
-            uncert_errs_indiv[i] = np.std(overlap_3[:,i])
-            #error_errs[i] = np.std(errors_3[:,i])
-        #print(overlap_3)
-        #avg_softmax_probs = 
-        #print(overlaps)
-        #print(uncert_errs_indiv)
+        fr1_err_rate = (1-np.mean(image_errors[:48]))*100
+        fr2_err_rate = (1-np.mean(image_errors[49:]))*100
+        avg_err_rate = (1-np.mean(image_errors))*100
         
         
+        #overlaps = 0.4+np.log(overlaps)*overlaps
+        print(softmax_probs[78])
         #bin_widths_probs = np.zeros(M)
         #bin_widths_uncert = np.zeros(M)
         #error_target = target
@@ -127,10 +130,6 @@ def main():
         image_errors_sorted = image_errors[overlaps.argsort()]
         #error_errs_sorted = error_errs[overlaps.argsort()]
         
-        fr1_err_rate = 0
-        fr2_err_rate = 0
-        #avg_err_rate = np.mean(image_errors)
-        avg_err_rate = 0
         
     #Bin data
     
@@ -189,7 +188,7 @@ def main():
                 else:
                     error_classifications[b] += image_errors_sorted[j + b*bin_count]
                     
-                
+                #error_classifications[b] += image_errors_sorted[j + b*bin_count]
                     
                 if accuracy_target[j + b*bin_count] == 1:
                     classifications[b] += accuracy_sorted[j + b*bin_count]
@@ -218,21 +217,12 @@ def main():
             
             
         #Calculate class-wise error rates
-        t = 0
-        for x in softmax_probs:
-            err = x
-            if target[t] == 0 and x >= 0.5:
-                fr1_err_rate += err
-                avg_err_rate += err
-            if target[t] == 1 and x <= 0.5:
-                fr2_err_rate += err
-                avg_err_rate += err
-            t += 1
-            
-        fr1_err_rate /= 49
-        fr2_err_rate /= 55
-        avg_err_rate /= total_datapoints
+        # fr1_uncert = np.std(image_errors[0:49])
+        # fr2_uncert = np.std(image_errors[50:103])
+        # avg_uncert = np.std(image_errors)
         
+        
+    
     #------------------------------------------------------------------------------
         
     #Format ECE and UCE, then plot graphs
@@ -243,6 +233,7 @@ def main():
     #Plot ECE graph
         ax = plt.subplot(111)
         plt.plot(bin_centres[:M], accuracy[:M], linewidth=1, marker='.', markersize=10)
+        #plt.scatter(bin_centres[:M], accuracy[:M], linewidth=1, marker='x')
         
         x = np.linspace(0, 1.0, 10)
         y = np.linspace(0, 1.0, 10)
@@ -289,7 +280,7 @@ def main():
         ax.spines.bottom.set_visible(False)
         plt.title("Model Calibration Plot: " + model_to_plot + " Test data")
         if use_entropy:
-            plt.xlabel("Uncertainty (predictive entropy)")
+            plt.xlabel("Uncertainty (entropy)")
         else:
             plt.xlabel("Uncertainty (overlap index)")
         plt.ylabel("Error")
@@ -301,9 +292,9 @@ def main():
         
     #Output extra information
         
-        print('Average error rate:', avg_err_rate)
-        print('FR I error rate:', fr1_err_rate)
-        print('FR II error rate:', fr2_err_rate)
+        print('Average Accuracy:', avg_err_rate)
+        print('FR I accuracy:', fr1_err_rate)
+        print('FR II accuracy:', fr2_err_rate)
     
     
     return    
