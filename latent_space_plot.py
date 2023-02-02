@@ -19,10 +19,17 @@ from matplotlib.ticker import ScalarFormatter,StrMethodFormatter
 plt.rcParams['font.size'] = 12
 
 
+def main():
+    
+    plot_latent_space('lenet_latent_test_data.csv', 'mutual information')
+    
+    return
+
 def plot_latent_space(filename, uncertainty_metric):
     
-    ax = plt.subplot(111)
     
+    plt.figure(figsize=(6.5,5))
+    ax = plt.subplot(111)
     csvfile = pd.read_csv(filename)
     
     targets = csvfile['target'].values
@@ -51,28 +58,32 @@ def plot_latent_space(filename, uncertainty_metric):
     y2 = [x[1] for x in fr2]
     u2 = [x[2] for x in fr2]
     
-    plt.grid(visible=True)
-    plt.figure(figsize=(5,5))
+    #plt.grid(visible=True)
+    #plt.tight_layout()
+    
     #plt.xlim(0,1)
     #plt.ylim(0,1)
-    ax.spines.right.set_visible(False)
-    ax.spines.top.set_visible(False)
-    ax.spines.left.set_visible(False)
-    ax.spines.bottom.set_visible(False)
+    # ax.spines.right.set_visible(False)
+    # ax.spines.top.set_visible(False)
+    # ax.spines.left.set_visible(False)
+    # ax.spines.bottom.set_visible(False)
     
-    plt.title('Latent space visualisation for ' + uncertainty_metric)
+    plt.title('Latent space visualisation for ' + uncertainty_metric, fontsize=12)
     
-    plt.scatter(x1, y1, c=u1, cmap='Blues', norm = colours.LogNorm(vmin=0.00000001,vmax=1))    
-    plt.scatter(x2, y2, c=u2, cmap='Oranges', norm = colours.LogNorm(vmin=0.00000001,vmax=1))  
+    
+    plt.scatter(x1, y1, c=u1, cmap='Blues', norm=colours.LogNorm(vmin=0.00000001,vmax=1), label='FR I', marker='.', s=50)
+    cbar1 = plt.colorbar(pad=-0.09)
+    cbar1.set_label('Uncertainty')
+    plt.scatter(x2, y2, c=u2, cmap='Oranges', norm=colours.LogNorm(vmin=0.00000001,vmax=1), label='FR II', marker='.', s=50)  
+    cbar2 = plt.colorbar()
+    cbar2.set_ticks([])
+    plt.legend()
+    
     plt.show()
     
     return
 
 
-def main():
-    
-    plot_latent_space('latent_values.csv', 'average overlap')
-    
-    return
+
 
 main()

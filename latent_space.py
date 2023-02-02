@@ -67,7 +67,7 @@ transform = transforms.Compose([
 ])
 
 
-test_data = locals()[config_dict['data']['dataset']](config_dict['data']['datadir'], train=False, download=True, transform=transform)
+test_data = locals()[config_dict['data']['dataset']](config_dict['data']['datadir'], train=True, download=True, transform=transform)
 test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
 N = len(test_loader)
