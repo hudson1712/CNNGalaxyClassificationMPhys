@@ -310,10 +310,92 @@ def fr_rotation_test(model, data, target, idx, device):
 
 #------------------------------------------------------------------------------
 
-def calc_entropy(softmax_probs, target):
+def fr_latent_space_test(model, data, target, idx, device):
     
-    arr = softmax_probs[:,:,target].reshape(900)
-    arr2 = softmax_probs[:,:,(1-target)].reshape(900)
+    T = 100
+    #rotation_list = range(0, 180, 20)
+    rotation_list = [0]
+    #print("True classification: ",target[0].item())
+    
+    image_list = []
+    outp_list = []
+    inpt_list = []
+    softmaxs = []
+    misclassifications = 0
+    
+    for r in rotation_list:
+    # make rotated image:
+        rotation_matrix = torch.Tensor([[[np.cos(r/360.0*2*np.pi), -np.sin(r/360.0*2*np.pi), 0],
+                                         [np.sin(r/360.0*2*np.pi), np.cos(r/360.0*2*np.pi), 0]]]).to(device)
+        grid = F.affine_grid(rotation_matrix, data.size(), align_corners=True)
+        data_rotate = F.grid_sample(data, grid, align_corners=True)
+        image_list.append(data_rotate)
+        
+        # get straight prediction:
+        model.eval()
+        x = model(data_rotate)
+        
+                                         
+        # run 100 stochastic forward passes:
+        model.enable_dropout()
+        output_list, input_list = [], []
+        for i in range(T):
+            x = model(data_rotate)
+            p = F.softmax(x,dim=1)
+            input_list.append(torch.unsqueeze(x, 0).cpu())
+            output_list.append(torch.unsqueeze(p, 0).cpu())
+            
+            if (target[0] == 0) and (p[0,1] >= 0.5):
+                misclassifications += 1
+            if (target[0] == 1) and (p[0,1] < 0.5):
+                misclassifications += 1
+            
+        
+        # calculate the mean output for each target:
+        output_mean = np.squeeze(torch.cat(output_list, 0).mean(0).data.cpu().numpy())
+        
+        if (target[0] == 0):
+            softmaxs.append(output_mean[0])
+        if (target[0] == 1):
+            softmaxs.append(output_mean[1])
+        # append per rotation output into list:
+        outp_list.append(np.squeeze(torch.cat(output_list, 0).data.numpy()))
+        inpt_list.append(np.squeeze(torch.cat(input_list, 0).data.numpy()))
+        
+
+    error = misclassifications / (T * len(rotation_list))
+    #print ('rotation degree', str(r), 'Predict : {} - {}'.format(output_mean.argmax(),output_mean))
+    
+    preds = np.array([0,1])
+    classes = np.array(["FRI","FRII"])
+    
+    outp_list = np.array(outp_list)
+    inpt_list = np.array(inpt_list)
+    rotation_list = np.array(rotation_list)
+    
+    
+    
+    
+    predictive_entropy = calc_entropy(outp_list, target[0], (T*len(rotation_list)))
+    average_entropy = calc_avg_entropy(outp_list, target[0], (T*len(rotation_list)))
+    mutual_information = predictive_entropy - average_entropy
+    
+    
+    eta = np.zeros(len(rotation_list))
+    for i in range(len(rotation_list)):
+        x = outp_list[i,:,0]
+        y = outp_list[i,:,1]
+        eta[i] = overlapping(x, y)
+    
+    return np.mean(eta), np.std(eta), error, predictive_entropy, average_entropy, mutual_information
+
+
+#------------------------------------------------------------------------------
+
+def calc_entropy(softmax_probs, target, N):
+    
+    arr = softmax_probs[:,:,target].reshape(N)
+    arr2 = softmax_probs[:,:,(1-target)].reshape(N)
     
     
     entropy = -(np.mean(arr)*np.log(np.mean(arr)) + np.mean(arr2)*np.log(np.mean(arr2)))
@@ -325,8 +407,8 @@ def calc_entropy(softmax_probs, target):
 
 def calc_avg_entropy(softmax_probs, target, N):
     
-    arr = softmax_probs[:,:,target].reshape(900)
-    arr2 = softmax_probs[:,:,(1-target)].reshape(900)
+    arr = softmax_probs[:,:,target].reshape(N)
+    arr2 = softmax_probs[:,:,(1-target)].reshape(N)
 
     entropy = -(np.mean(arr*np.log(arr)) + np.mean(arr2*np.log(arr2)))
     entropy /= np.log(2)
