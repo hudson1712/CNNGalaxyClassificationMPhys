@@ -243,7 +243,7 @@ def fr_rotation_test(model, data, target, idx, device):
     
     
     
-    predictive_entropy = calc_entropy(outp_list, target[0])
+    predictive_entropy = calc_entropy(outp_list, target[0], (T*len(rotation_list)))
     average_entropy = calc_avg_entropy(outp_list, target[0], (T*len(rotation_list)))
     mutual_information = predictive_entropy - average_entropy
     
