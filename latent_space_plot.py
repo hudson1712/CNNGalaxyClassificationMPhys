@@ -17,11 +17,12 @@ from matplotlib.ticker import ScalarFormatter,StrMethodFormatter
 
 #pl.rcParams["font.family"] = "Times"
 plt.rcParams['font.size'] = 12
+marker_size = 50
 
 
 def main():
     
-    plot_latent_space('lenet_latent_test_data.csv', 'mutual information')
+    plot_latent_space('lenet_rotations/lenet_latent_values_beta=2.5.csv', 'average overlap')
     
     return
 
@@ -71,10 +72,10 @@ def plot_latent_space(filename, uncertainty_metric):
     plt.title('Latent space visualisation for ' + uncertainty_metric, fontsize=12)
     
     
-    plt.scatter(x1, y1, c=u1, cmap='Blues', norm=colours.LogNorm(vmin=0.00000001,vmax=1), label='FR I', marker='.', s=50)
+    plt.scatter(x1, y1, c=u1, cmap='Blues', norm=colours.LogNorm(vmin=0.00000001,vmax=1), label='FR I', marker='.', s=marker_size)
     cbar1 = plt.colorbar(pad=-0.09)
     cbar1.set_label('Uncertainty')
-    plt.scatter(x2, y2, c=u2, cmap='Oranges', norm=colours.LogNorm(vmin=0.00000001,vmax=1), label='FR II', marker='.', s=50)  
+    plt.scatter(x2, y2, c=u2, cmap='Oranges', norm=colours.LogNorm(vmin=0.00000001,vmax=1), label='FR II', marker='.', s=marker_size)  
     cbar2 = plt.colorbar()
     cbar2.set_ticks([])
     plt.legend()

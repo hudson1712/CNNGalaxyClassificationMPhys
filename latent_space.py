@@ -17,6 +17,9 @@ from FRDEEP import FRDEEPF
 from MiraBest import MBFRConfident
 from MiraBest import MBFRUncertain
 
+
+beta = 2.5 #Temperature for Platt scaling
+
 # -----------------------------------------------------------------------------
 # extract information from config file:
     
@@ -67,7 +70,7 @@ transform = transforms.Compose([
 ])
 
 
-test_data = locals()[config_dict['data']['dataset']](config_dict['data']['datadir'], train=True, download=True, transform=transform)
+test_data = locals()[config_dict['data']['dataset']](config_dict['data']['datadir'], train=False, download=True, transform=transform)
 test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
 N = len(test_loader)
@@ -112,13 +115,13 @@ for i in range(0,N):
     
     # get straight prediction:
     model.eval()
-    x = model(data)
+    x = beta*model(data)
     print(x)
     latent_param_1 = x[0,0].detach().cpu().numpy()
     latent_param_2 = x[0,1].detach().cpu().numpy()
     p = F.softmax(x,dim=1)[0].detach().cpu().numpy()
     
-    av_overlap, std_overlap, class_error, p_entropy, a_entropy, mi = fr_latent_space_test(model, data, target, i, device)
+    av_overlap, std_overlap, class_error, p_entropy, a_entropy, mi = fr_latent_space_test(model, data, target, i, device, beta)
     
     print(i, av_overlap, std_overlap)
     

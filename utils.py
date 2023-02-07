@@ -310,8 +310,9 @@ def fr_rotation_test(model, data, target, idx, device):
 
 #------------------------------------------------------------------------------
 
-def fr_latent_space_test(model, data, target, idx, device):
+def fr_latent_space_test(model, data, target, idx, device, temperature):
     
+    beta = temperature
     T = 100
     #rotation_list = range(0, 180, 20)
     rotation_list = [0]
@@ -340,7 +341,7 @@ def fr_latent_space_test(model, data, target, idx, device):
         model.enable_dropout()
         output_list, input_list = [], []
         for i in range(T):
-            x = model(data_rotate)
+            x = beta*model(data_rotate)
             p = F.softmax(x,dim=1)
             input_list.append(torch.unsqueeze(x, 0).cpu())
             output_list.append(torch.unsqueeze(p, 0).cpu())

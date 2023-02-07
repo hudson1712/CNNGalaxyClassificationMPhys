@@ -36,10 +36,12 @@ def main():
 #------------------------------------------------------------------------------
 #Parameters
 
-    models = ['LeNet','C4','C8','C16','D4','D8','D16']
-    #models = ['LeNet']
-    use_entropy = 1
-    adjust_entropy = 1
+    #models = ['LeNet','C4','C8','C16','D4','D8','D16']
+    models = ['Lenet']
+    beta = '2.5'
+    
+    use_entropy = 0
+    adjust_entropy = 0
     frequentist = 0
     M = 26 #number of bins for histogram
     scale_graph = 0
@@ -47,11 +49,10 @@ def main():
     for model_to_plot in models:
         print(model_to_plot)
         #csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_sn_uncertain.csv')
-        #csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_sn_all.csv')
-        #csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_entropy_0.csv')
-        csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_spectral_norm.csv')
+        #csv_file_1 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_latent_values_beta=2.csv')
+        csv_file_2 = pd.read_csv(model_to_plot + '_rotations/' + model_to_plot + '_latent_values_beta='+beta+'.csv')
         
-        #files = [csv_file_0, csv_file_1, csv_file_2]
+        #files = [csv_file_1, csv_file_2]
         files = [csv_file_2]
         equal_count_bins = True
         
@@ -93,7 +94,7 @@ def main():
             image_errors = csv_file['classification error %'].values
             
             if use_entropy:
-                overlaps = csv_file['mutual information'].values
+                overlaps = csv_file['predictive entropy'].values
                 
                 if adjust_entropy:
                     j=0
@@ -229,6 +230,7 @@ def main():
         #print(max(uncertainty))
         ECE = np.format_float_positional(ECE, precision=4)
         UCE = np.format_float_positional(UCE, precision=4)
+        #BETA = np.format_float_positional(beta, precision=3)
         
     #Plot ECE graph
         ax = plt.subplot(111)
@@ -244,12 +246,12 @@ def main():
         ax.spines.left.set_visible(False)
         ax.spines.bottom.set_visible(False)
         
-        plt.title("Model Calibration Plot: " + model_to_plot + " Test data")
+        plt.title("Calibration Plot: " + model_to_plot + " Test data")
         # plt.xlim(0,1)
         # plt.ylim(0,1)
         plt.xlabel("Confidence")
         plt.ylabel("Accuracy")
-        textstr = ("ECE =  " + ECE)
+        textstr = ("ECE =  " + ECE + "\n" "\u03B2 = " + beta)
         props = dict(boxstyle='square', facecolor='silver', alpha=0.5)
         plt.text(0.05, 0.95, textstr, fontsize=14,
         verticalalignment='top', bbox=props)
@@ -278,13 +280,13 @@ def main():
         ax.spines.top.set_visible(False)
         ax.spines.left.set_visible(False)
         ax.spines.bottom.set_visible(False)
-        plt.title("Model Calibration Plot: " + model_to_plot + " Test data")
+        plt.title("Calibration Plot: " + model_to_plot + " Test data")
         if use_entropy:
             plt.xlabel("Uncertainty (entropy)")
         else:
             plt.xlabel("Uncertainty (overlap index)")
         plt.ylabel("Error")
-        textstr = ("UCE =  " + UCE)
+        textstr = ("UCE =  " + UCE + "\n" "\u03B2 = " + beta)
         props = dict(boxstyle='square', facecolor='silver', alpha=0.5)
         plt.text(0.05, 0.95, textstr, fontsize=14,
             verticalalignment='top', bbox=props)
