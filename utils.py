@@ -12,6 +12,7 @@ import pylab as pl
 import pandas as pd
 from matplotlib.offsetbox import (OffsetImage, AnnotationBbox)
 
+T = 3/(np.pi**2)
 # ----------------------------------------------------------
 
 def parse_args():
@@ -76,10 +77,16 @@ def train(model, trainloader, optimiser, device):
     model.train()
     for batch_idx, (data, labels) in enumerate(trainloader):
         data, labels = data.to(device), labels.to(device)
-
+        
+        #model.reset_precision_matrix()
+        #model.reset_cov()
         optimiser.zero_grad()
+        
+        output, gp_covmat = model(data)
 
-        p_y = F.softmax(model(data), dim=1)
+        #output = model(data)
+        
+        p_y = F.softmax(output, dim=1)
         loss = model.loss(p_y, labels)
             
         train_loss += loss.item() * data.size(0)
@@ -103,7 +110,10 @@ def test(model, testloader, device):
         for batch_idx, (data, labels) in enumerate(testloader):
             data, labels = data.to(device), labels.to(device)
 
-            p_y = F.softmax(model(data), dim=1)
+            output, gp_covmat = model(data)
+            #output = model(data)
+
+            p_y = F.softmax(output, dim=1)
             loss = model.loss(p_y, labels)
                 
             test_loss += loss.item() * data.size(0)
@@ -341,7 +351,8 @@ def fr_latent_space_test(model, data, target, idx, device, temperature):
         model.enable_dropout()
         output_list, input_list = [], []
         for i in range(T):
-            x = beta*model(data_rotate)
+            x, covmat = model(data_rotate)
+            x *= beta
             p = F.softmax(x,dim=1)
             input_list.append(torch.unsqueeze(x, 0).cpu())
             output_list.append(torch.unsqueeze(p, 0).cpu())
@@ -390,6 +401,80 @@ def fr_latent_space_test(model, data, target, idx, device, temperature):
     
     return np.mean(eta), np.std(eta), error, predictive_entropy, average_entropy, mutual_information
 
+#------------------------------------------------------------------------------
+
+def gp_test(model, data, target, idx, device, temperature):
+    
+    rotation_list = range(0, 180, 20)
+    #rotation_list = [0]
+    #print("True classification: ",target[0].item())
+    
+    image_list = []
+    outp_list = []
+    inpt_list = []
+    softmaxs = []
+    misclassifications = 0
+    
+    for r in rotation_list:
+    # make rotated image:
+        rotation_matrix = torch.Tensor([[[np.cos(r/360.0*2*np.pi), -np.sin(r/360.0*2*np.pi), 0],
+                                         [np.sin(r/360.0*2*np.pi), np.cos(r/360.0*2*np.pi), 0]]]).to(device)
+        grid = F.affine_grid(rotation_matrix, data.size(), align_corners=True)
+        data_rotate = F.grid_sample(data, grid, align_corners=True)
+        image_list.append(data_rotate)
+        
+        # get straight prediction:
+        model.eval()
+        x = model(data_rotate)
+
+        output_list, input_list = [], []
+        
+        x, covmat = model(data_rotate)
+        p = F.softmax(x,dim=1)
+        input_list.append(torch.unsqueeze(x, 0).cpu())
+        output_list.append(torch.unsqueeze(p, 0).cpu())
+        
+        if (target[0] == 0) and (p[0,1] >= 0.5):
+            misclassifications += 1
+        if (target[0] == 1) and (p[0,1] < 0.5):
+            misclassifications += 1
+        
+        # calculate the mean output for each target:
+        output_mean = np.squeeze(torch.cat(output_list, 0).mean(0).data.cpu().numpy())
+        
+        if (target[0] == 0):
+            softmaxs.append(output_mean[0])
+        if (target[0] == 1):
+            softmaxs.append(output_mean[1])
+        # append per rotation output into list:
+        outp_list.append(np.squeeze(torch.cat(output_list, 0).data.numpy()))
+        inpt_list.append(np.squeeze(torch.cat(input_list, 0).data.numpy()))
+        
+
+    error = misclassifications / (len(rotation_list))
+    #print ('rotation degree', str(r), 'Predict : {} - {}'.format(output_mean.argmax(),output_mean))
+    
+    preds = np.array([0,1])
+    classes = np.array(["FRI","FRII"])
+    
+    outp_list = np.array(outp_list)
+    inpt_list = np.array(inpt_list)
+    rotation_list = np.array(rotation_list)
+     
+    #predictive_entropy = calc_entropy(outp_list, target[0], (len(rotation_list)))
+    #average_entropy = 1
+    #mutual_information = predictive_entropy - average_entropy
+    
+    
+    eta = np.zeros(len(rotation_list))
+    for i in range(len(rotation_list)):
+        x = outp_list[i,0]
+        y = outp_list[i,1]
+        #eta[i] = overlapping(x, y)
+    
+    return error
+
+
 
 #------------------------------------------------------------------------------
 
@@ -401,6 +486,23 @@ def calc_entropy(softmax_probs, target, N):
     
     entropy = -(np.mean(arr)*np.log(np.mean(arr)) + np.mean(arr2)*np.log(np.mean(arr2)))
     entropy /= np.log(2)
+    
+    return entropy
+
+#------------------------------------------------------------------------------
+
+def calc_GPentropy(softmax_probs):
+    
+    arr = softmax_probs[:,0]
+    arr2 = 1-arr
+    entropy = np.zeros(len(softmax_probs))
+    print(arr)
+    
+    i=0
+    for x in softmax_probs:
+        entropy[i] = -(np.mean(arr[i])*np.log(np.mean(arr[i])) + np.mean(arr2[i])*np.log(np.mean(arr2[i])))
+        entropy[i] /= np.log(2)
+        i+=1
     
     return entropy
 

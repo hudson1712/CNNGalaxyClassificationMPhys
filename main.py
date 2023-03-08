@@ -9,7 +9,7 @@ import numpy as np
 import csv
 from PIL import Image
 
-from models import VanillaLeNet, CNSteerableLeNet, DNSteerableLeNet, DNRestrictedLeNet
+from models import VanillaLeNet, CNSteerableLeNet, DNSteerableLeNet, DNRestrictedLeNet, GPLeNet
 from utils import *
 from FRDEEP import FRDEEPF
 from MiraBest import MBFRConfident
@@ -111,13 +111,16 @@ with open(csvfile, 'w+', newline="") as f_out:
 _bestacc = 0.
 for epoch in range(epochs):  # loop over the dataset multiple times
     
+    #model.reset_cov()
     train_loss = train(model, train_loader, optimizer, device)
     test_loss, accuracy = test(model, test_loader, device)
         
+    #print(gp_covmat)
+    
     scheduler.step(test_loss)
 
     # check early stopping criteria:
-    if early_stopping and accuracy>_bestacc:
+    if early_stopping and accuracy>=_bestacc:
         _bestacc = accuracy
         torch.save(model.state_dict(), modfile)
         best_acc = accuracy
