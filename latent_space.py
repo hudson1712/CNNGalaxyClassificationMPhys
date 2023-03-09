@@ -14,7 +14,7 @@ import csv
 import glob
 from PIL import Image
 
-from models import VanillaLeNet, CNSteerableLeNet, DNSteerableLeNet, GPLeNet
+from models import VanillaLeNet, CNSteerableLeNet, DNSteerableLeNet, GPLeNet, DN_GPLeNet
 from utils import *
 from plots import *
 from FRDEEP import FRDEEPF
@@ -24,7 +24,7 @@ from MiraBest import *
 beta = 2.5 #Temperature for Platt scaling
 T = 3/(np.pi**2)
 T = 1
-use_ood = 1
+use_ood = 0
 use_training = 0
 
 # -----------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import numpy as np
 import csv
 from PIL import Image
 
-from models import VanillaLeNet, CNSteerableLeNet, DNSteerableLeNet, DNRestrictedLeNet, GPLeNet
+from models import VanillaLeNet, CNSteerableLeNet, DNSteerableLeNet, DNRestrictedLeNet, GPLeNet, DN_GPLeNet
 from utils import *
 from FRDEEP import FRDEEPF
 from MiraBest import MBFRConfident
