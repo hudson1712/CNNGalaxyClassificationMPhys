@@ -414,15 +414,15 @@ class DNSteerableLeNet(nn.Module):
 class DN_GPLeNet(nn.Module):
     def __init__(self, in_chan, out_chan, imsize, kernel_size=5, N=8, 
                  hidden_size = 84,
-                 gp_kernel_scale=1,
+                 gp_kernel_scale=0.1,
                  num_inducing=1024,
                  gp_output_bias=0.,
                  layer_norm_eps=1e-12,
                  scale_random_features=True,
                  n_power_iterations=5,
                  normalize_input=True,
-                 gp_cov_momentum=-1,
-                 gp_cov_ridge_penalty=1,
+                 gp_cov_momentum=0.999,
+                 gp_cov_ridge_penalty=1e-3,
                  num_classes=2,
                  device='cuda'):
         super(DN_GPLeNet, self).__init__()
