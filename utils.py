@@ -82,9 +82,9 @@ def train(model, trainloader, optimiser, device):
         #model.reset_cov()
         optimiser.zero_grad()
         
-        output, gp_covmat = model(data)
+        #output, gp_covmat = model(data)
 
-        #output = model(data)
+        output = model(data)
         
         p_y = F.softmax(output, dim=1)
         loss = model.loss(p_y, labels)
@@ -110,8 +110,8 @@ def test(model, testloader, device):
         for batch_idx, (data, labels) in enumerate(testloader):
             data, labels = data.to(device), labels.to(device)
 
-            output, gp_covmat = model(data)
-            #output = model(data)
+            #output, gp_covmat = model(data)
+            output = model(data)
 
             p_y = F.softmax(output, dim=1)
             loss = model.loss(p_y, labels)
