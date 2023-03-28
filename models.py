@@ -360,7 +360,7 @@ class DNSteerableLeNet(nn.Module):
 
         self.fc1   = nn.Linear(16*z*z, 120)
         self.fc2   = nn.Linear(120, 84)
-        self.fc3   = e2nn.utils.spectral_norm(nn.Linear(84, out_chan))
+        self.fc3   = nn.utils.spectral_norm(nn.Linear(84, out_chan))
         
         self.drop  = nn.Dropout(p=0.5)
         

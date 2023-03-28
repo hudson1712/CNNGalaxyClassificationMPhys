@@ -15,7 +15,7 @@ import glob
 from PIL import Image
 import random as rd
 import matplotlib as plt
-import umap
+
 import astropy.stats
 from sklearn.preprocessing import StandardScaler
 
@@ -25,7 +25,7 @@ from plots import *
 from FRDEEP import FRDEEPF
 from MiraBest import *
 #from MiraBest_F import *
-from galaxy_mnist import *
+
 
 
 beta = 2.5 #Temperature for Platt scaling
