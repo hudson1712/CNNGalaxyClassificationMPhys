@@ -351,7 +351,7 @@ def fr_latent_space_test(model, data, target, idx, device, temperature):
         model.enable_dropout()
         output_list, input_list = [], []
         for i in range(T):
-            x, covmat = model(data_rotate)
+            x = model(data_rotate)
             x *= beta
             p = F.softmax(x,dim=1)
             input_list.append(torch.unsqueeze(x, 0).cpu())
