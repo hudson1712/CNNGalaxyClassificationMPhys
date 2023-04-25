@@ -24,7 +24,9 @@ class VanillaLeNet(nn.Module):
         self.mask = utils.build_mask(imsize, margin=1)
 
         self.conv1 = nn.Conv2d(in_chan, 6, kernel_size, padding=1)
+        self.bn1   = nn.BatchNorm2d(6)
         self.conv2 = nn.Conv2d(6, 16, kernel_size, padding=1)
+        self.bn2   = nn.BatchNorm2d(16)
         self.fc1   = nn.utils.spectral_norm(nn.Linear(16*z*z, 120))
         self.fc2   = nn.utils.spectral_norm(nn.Linear(120, 84))
         self.fc3   = nn.utils.spectral_norm(nn.Linear(84, out_chan), n_power_iterations=5)
@@ -33,7 +35,7 @@ class VanillaLeNet(nn.Module):
         # dummy parameter for tracking device
         self.dummy = nn.Parameter(torch.empty(0))
         
-    def loss(self,p,y):
+    def loss(self,p,y, covmat):
         
         # check device for model:
         device = self.dummy.device
@@ -50,6 +52,9 @@ class VanillaLeNet(nn.Module):
                 m.train()
 
         return
+    
+    def reset_cov(self):
+        return
         
     def forward(self, x):
         
@@ -59,9 +64,9 @@ class VanillaLeNet(nn.Module):
         
         x = x*mask
         
-        x = F.relu(self.conv1(x))
+        x = self.bn1(F.relu(self.conv1(x)))
         x = F.max_pool2d(x, 2)
-        x = F.relu(self.conv2(x))
+        x = self.bn2(F.relu(self.conv2(x)))
         x = F.max_pool2d(x, 2)
         
         x = x.view(x.size()[0], -1)
@@ -75,7 +80,7 @@ class VanillaLeNet(nn.Module):
         #print(x)
         
     
-        return x, np.empty(50)
+        return x, np.zeros(50)
 
 # -----------------------------------------------------------------------------
 #Implement SNGP with random features
@@ -97,15 +102,17 @@ def RandomFeatureLinear(i_dim, o_dim, bias=True, require_grad=False):
 class GPLeNet(nn.Module):
     def __init__(self, in_chan, out_chan, imsize, kernel_size=5, N=None, 
                  hidden_size = 84,
-                 gp_kernel_scale=1,
+                 gp_kernel_scale=0.1,
                  num_inducing=1024,
                  gp_output_bias=0.,
                  layer_norm_eps=1e-12,
                  scale_random_features=True,
                  n_power_iterations=5,
                  normalize_input=True,
+                 #gp_cov_momentum=0.999,
+                 #gp_cov_ridge_penalty=1e-3,
                  gp_cov_momentum=-1,
-                 gp_cov_ridge_penalty=1,
+                 gp_cov_ridge_penalty=0.1,
                  num_classes=2,
                  device='cuda'):
         super(GPLeNet, self).__init__()
@@ -128,7 +135,11 @@ class GPLeNet(nn.Module):
         # dummy parameter for tracking device
         self.dummy = nn.Parameter(torch.empty(0))
         
-        self.gp_input_scale = 1. / np.sqrt(gp_kernel_scale)
+        self.gp_input_scale = nn.Parameter(torch.tensor(0.3, dtype=torch.float32))
+        #self.mean_field_scalar = nn.Parameter(torch.tensor(1/(2*gp_kernel_scale**2), dtype=torch.float32))
+        self.mean_field_scalar= nn.Parameter(torch.tensor(0.1, dtype=torch.float32))
+        
+        
         self.gp_feature_scale = np.sqrt(2. / float(num_inducing))
         self.gp_output_bias = gp_output_bias
         self.scale_random_features = scale_random_features
@@ -137,6 +148,7 @@ class GPLeNet(nn.Module):
         self.gp_cov_momentum = gp_cov_momentum
         self._gp_input_normalize_layer = torch.nn.LayerNorm(hidden_size, eps=layer_norm_eps)
         self._gp_output_bias = torch.tensor([self.gp_output_bias] * num_classes).to(device)
+
         
 
         # Laplace Random Feature Covariance
@@ -200,7 +212,7 @@ class GPLeNet(nn.Module):
         return gp_cov_matrix
         
         
-    def loss(self,p,y):
+    def loss(self,p,y, cov_mat):
         
         # check device for model:
         device = self.dummy.device
@@ -210,12 +222,17 @@ class GPLeNet(nn.Module):
         #print(p)
         loss = loss_fnc(torch.log(p),y)
         
+        loss -= 0.5 * torch.logdet(self.precision_matrix)
+        #loss += 0.5 * torch.log(self.gp_input_scale)
+        #loss += 0.5 * torch.log(self.mean_field_scalar)
+
+        
         return loss
      
     def forward(self, x, update_cov: bool = True, return_gp_cov: bool = True):
         
-        T=3/np.pi**2
-        T=1
+        #T=3/np.pi**2
+        #T=50
         
         device = self.dummy.device
         mask = self.mask.to(device=device)
@@ -230,21 +247,23 @@ class GPLeNet(nn.Module):
         
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-            
+        
+        latent_features = x
+        
         gp_feature, gp_output = self.gp_layer(x, update_cov=update_cov)
         gp_cov_matrix = self.compute_predictive_covariance(gp_feature)
         
         
-        
-        if not (self.training):
-            sngp_variance = torch.sqrt(torch.linalg.diagonal(gp_cov_matrix)[:, None])
+        #if not (self.training):
+        sngp_std = torch.linalg.diagonal(gp_cov_matrix)[:, None]
             
-            gp_output[:] /= torch.sqrt(1 + T*sngp_variance[:])
-            
+        gp_output[:] /= torch.sqrt(1 + self.mean_field_scalar * sngp_std[:])
         
-        print(gp_cov_matrix)
+        print(self.gp_input_scale)
+        print(self.mean_field_scalar)
         
         return gp_output, gp_cov_matrix
+        #return gp_output, gp_cov_matrix
     
 #-------------------------------------------------------------------------------
     
@@ -267,15 +286,20 @@ class CNSteerableLeNet(nn.Module):
         self.mask = e2nn.MaskModule(in_type, imsize, margin=1)
         self.conv1 = e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=1, bias=False)
         self.relu1 = e2nn.ReLU(out_type, inplace=True)
+        self.bn1 = nn.BatchNorm2d(6*N)
         self.pool1 = e2nn.PointwiseMaxPoolAntialiased(out_type, kernel_size=2)
 
         in_type = self.pool1.out_type
         out_type = e2nn.FieldType(self.r2_act, 16*[self.r2_act.regular_repr])
         self.conv2 = e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=1, bias=False)
         self.relu2 = e2nn.ReLU(out_type, inplace=True)
+        self.bn2 = nn.BatchNorm2d(16*N)
         self.pool2 = e2nn.PointwiseMaxPoolAntialiased(out_type, kernel_size=2)
         
         self.gpool = e2nn.GroupPooling(out_type)
+        
+        
+        
 
         self.fc1   = nn.Linear(16*z*z, 120)
         self.fc2   = nn.Linear(120, 84)
@@ -287,7 +311,7 @@ class CNSteerableLeNet(nn.Module):
         self.dummy = nn.Parameter(torch.empty(0))
         
         
-    def loss(self,p,y):
+    def loss(self,p,y, covmat):
         
         # check device for model:
         device = self.dummy.device
@@ -304,17 +328,23 @@ class CNSteerableLeNet(nn.Module):
                 m.train()
 
         return
-      
+    
+    def reset_cov(self):
+        return
       
     def forward(self, x):
         
         x = e2nn.GeometricTensor(x, self.input_type)
         x = self.conv1(x)
         x = self.relu1(x)
+        x = self.bn1(x.tensor)
+        x = e2nn.GeometricTensor(x, self.relu1.out_type)
         x = self.pool1(x)
         
         x = self.conv2(x)
         x = self.relu2(x)
+        x = self.bn2(x.tensor)
+        x = e2nn.GeometricTensor(x, self.relu2.out_type)
         x = self.pool2(x)
         
         x = self.gpool(x)
@@ -327,7 +357,198 @@ class CNSteerableLeNet(nn.Module):
         x = self.drop(x)
         x = self.fc3(x)
     
-        return x
+        return x, np.zeros(50)
+    
+    
+#------------------------------------------------------------------------------
+    
+class CN_GPLeNet(nn.Module):
+    def __init__(self, in_chan, out_chan, imsize, kernel_size=5, N=8, 
+                 hidden_size = 84,
+                 gp_kernel_scale=0.1,
+                 num_inducing=1024,
+                 gp_output_bias=0.,
+                 layer_norm_eps=1e-12,
+                 scale_random_features=True,
+                 n_power_iterations=5,
+                 normalize_input=True,
+                 #gp_cov_momentum=0.999,
+                 #gp_cov_ridge_penalty=1e-3,
+                 gp_cov_momentum=-1,
+                 gp_cov_ridge_penalty=0.1,
+                 num_classes=2,
+                 device='cuda'):
+        super(CN_GPLeNet, self).__init__()
+        
+        z = 0.5*(imsize - 2)
+        z = int(0.5*(z - 2))
+        
+        self.r2_act = gspaces.Rot2dOnR2(N)
+        
+        in_type = e2nn.FieldType(self.r2_act, [self.r2_act.trivial_repr])
+        self.input_type = in_type
+        
+        out_type = e2nn.FieldType(self.r2_act, 6*[self.r2_act.regular_repr])
+        self.mask = e2nn.MaskModule(in_type, imsize, margin=1)
+        self.conv1 = e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=1, bias=False)
+        self.relu1 = e2nn.ReLU(out_type, inplace=True)
+        self.bn1 = nn.BatchNorm2d(6*N)
+        self.pool1 = e2nn.PointwiseMaxPoolAntialiased(out_type, kernel_size=2)
+
+        in_type = self.pool1.out_type
+        out_type = e2nn.FieldType(self.r2_act, 16*[self.r2_act.regular_repr])
+        self.conv2 = e2nn.R2Conv(in_type, out_type, kernel_size=5, padding=1, bias=False)
+        self.relu2 = e2nn.ReLU(out_type, inplace=True)
+        self.bn2 = nn.BatchNorm2d(16*N)
+        self.pool2 = e2nn.PointwiseMaxPoolAntialiased(out_type, kernel_size=2)
+        
+        self.gpool = e2nn.GroupPooling(out_type)
+        
+
+        self.fc1   = nn.utils.spectral_norm(nn.Linear(16*z*z, 120), n_power_iterations=5)
+        self.fc2   = nn.utils.spectral_norm(nn.Linear(120, 84), n_power_iterations=5)
+        
+        self._random_feature = RandomFeatureLinear(hidden_size, num_inducing)
+        self._gp_output_layer =  nn.utils.spectral_norm(nn.Linear(num_inducing, num_classes, bias=False),n_power_iterations=5)
+        
+        # dummy parameter for tracking device
+        self.dummy = nn.Parameter(torch.empty(0))
+        
+        self.gp_input_scale = nn.Parameter(torch.tensor(1/np.sqrt(gp_kernel_scale), dtype=torch.float32), requires_grad=False)
+        #self.gp_input_scale = 1/np.sqrt(gp_kernel_scale)
+        #self.mean_field_scalar= 50
+
+        self.mean_field_scalar= nn.Parameter(torch.tensor(1, dtype=torch.float32),requires_grad=False)
+        
+        
+        self.gp_feature_scale = np.sqrt(2. / float(num_inducing))
+        self.gp_output_bias = gp_output_bias
+        self.scale_random_features = scale_random_features
+        self.normalize_input = normalize_input
+        self.gp_cov_ridge_penalty = gp_cov_ridge_penalty
+        self.gp_cov_momentum = gp_cov_momentum
+        self._gp_input_normalize_layer = torch.nn.LayerNorm(hidden_size, eps=layer_norm_eps)
+        self._gp_output_bias = torch.tensor([self.gp_output_bias] * num_classes).to(device)
+
+        
+
+        # Laplace Random Feature Covariance
+        # Posterior precision matrix for the GP's random feature coefficients.
+        self.initial_precision_matrix = (self.gp_cov_ridge_penalty * torch.eye(num_inducing).to(device))
+        self.precision_matrix = torch.nn.Parameter(copy.deepcopy(self.initial_precision_matrix), requires_grad=False)
+        
+        
+    def gp_layer(self, gp_inputs, update_cov=True):
+        # Supports lengthscale for custom random feature layer by directly
+        # rescaling the input.
+        if self.normalize_input:
+            gp_inputs = self._gp_input_normalize_layer(gp_inputs)
+
+        gp_feature = self._random_feature(gp_inputs)
+        # cosine
+        gp_feature = torch.cos(gp_feature)
+
+        if self.scale_random_features:
+            gp_feature = gp_feature * self.gp_input_scale
+
+        # Computes posterior center (i.e., MAP estimate) and variance.
+        gp_output = self._gp_output_layer(gp_feature) + self._gp_output_bias
+
+        if update_cov:
+            # update precision matrix
+            self.update_cov(gp_feature)
+        return gp_feature, gp_output
+
+    def reset_cov(self):
+        self.precision_matrix = torch.nn.Parameter(copy.deepcopy(self.initial_precision_matrix), requires_grad=False)
+
+    def update_cov(self, gp_feature):
+        # https://github.com/google/edward2/blob/main/edward2/tensorflow/layers/random_feature.py#L346
+        batch_size = gp_feature.size()[0]
+        precision_matrix_minibatch = torch.matmul(gp_feature.t(), gp_feature)
+        # Updates the population-wise precision matrix.
+        if self.gp_cov_momentum > 0:
+            # Use moving-average updates to accumulate batch-specific precision
+            # matrices.
+            precision_matrix_minibatch = precision_matrix_minibatch / batch_size
+            precision_matrix_new = (
+                    self.gp_cov_momentum * self.precision_matrix +
+                    (1. - self.gp_cov_momentum) * precision_matrix_minibatch)
+        else:
+            # Compute exact population-wise covariance without momentum.
+            # If use this option, make sure to pass through data only once.
+            precision_matrix_new = self.precision_matrix + precision_matrix_minibatch
+        #self.precision_matrix.weight = precision_matrix_new
+        self.precision_matrix = torch.nn.Parameter(precision_matrix_new, requires_grad=False)
+
+
+    def compute_predictive_covariance(self, gp_feature):
+        # https://github.com/google/edward2/blob/main/edward2/tensorflow/layers/random_feature.py#L403
+        # Computes the covariance matrix of the feature coefficient.
+        feature_cov_matrix = torch.linalg.inv(self.precision_matrix)
+
+        # Computes the covariance matrix of the gp prediction.
+        cov_feature_product = torch.matmul(feature_cov_matrix, gp_feature.t()) * self.gp_cov_ridge_penalty
+        gp_cov_matrix = torch.matmul(gp_feature, cov_feature_product)
+        return gp_cov_matrix
+        
+        
+    def loss(self, p, y, cov_mat):
+        
+        # check device for model:
+        device = self.dummy.device
+        
+
+        loss_fnc = nn.NLLLoss().to(device=device)
+
+        loss = loss_fnc(torch.log(p),y)
+        #log_det = 0.01*torch.logdet(cov_mat)
+        #loss += log_det
+        
+        return loss
+     
+    def forward(self, x, update_cov: bool = True, return_gp_cov: bool = True):
+        
+        #T=3/np.pi**2
+        #T=50
+        
+        x = e2nn.GeometricTensor(x, self.input_type)
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.bn1(x.tensor)
+        x = e2nn.GeometricTensor(x, self.relu1.out_type)
+        x = self.pool1(x)
+        
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.bn2(x.tensor)
+        x = e2nn.GeometricTensor(x, self.relu2.out_type)
+        x = self.pool2(x)
+        
+        x = self.gpool(x)
+        x = x.tensor
+        
+        x = x.view(x.size()[0], -1)
+        
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        
+        #latent_features = x
+        
+        gp_feature, gp_output = self.gp_layer(x, update_cov=update_cov)
+        gp_cov_matrix = self.compute_predictive_covariance(gp_feature)
+        
+        
+        #if not (self.training):
+        sngp_var = torch.linalg.diagonal(gp_cov_matrix)[:, None]
+            
+        gp_output[:] /= torch.sqrt(1 + self.mean_field_scalar * sngp_var[:])
+        
+        print(self.gp_input_scale)
+        print(self.mean_field_scalar)
+        
+        return gp_output, gp_cov_matrix
+
 
 # -----------------------------------------------------------------------------
 
@@ -360,7 +581,7 @@ class DNSteerableLeNet(nn.Module):
 
         self.fc1   = nn.Linear(16*z*z, 120)
         self.fc2   = nn.Linear(120, 84)
-        self.fc3   = nn.utils.spectral_norm(nn.Linear(84, out_chan))
+        self.fc3   = e2nn.utils.spectral_norm(nn.Linear(84, out_chan))
         
         self.drop  = nn.Dropout(p=0.5)
         
@@ -421,8 +642,8 @@ class DN_GPLeNet(nn.Module):
                  scale_random_features=True,
                  n_power_iterations=5,
                  normalize_input=True,
-                 gp_cov_momentum=0.999,
-                 gp_cov_ridge_penalty=1e-3,
+                 gp_cov_momentum=-1,
+                 gp_cov_ridge_penalty=0.1,
                  num_classes=2,
                  device='cuda'):
         super(DN_GPLeNet, self).__init__()
@@ -452,8 +673,8 @@ class DN_GPLeNet(nn.Module):
         
         self.gpool = e2nn.GroupPooling(out_type)
 
-        self.bn1   = nn.BatchNorm2d(6)
-        self.bn2   = nn.BatchNorm2d(16)
+        self.bn1   = nn.BatchNorm2d(12*N)
+        self.bn2   = nn.BatchNorm2d(32*N)
         self.fc1   = nn.utils.spectral_norm(nn.Linear(16*z*z, 120), n_power_iterations=1)
         self.fc2   = nn.utils.spectral_norm(nn.Linear(120, hidden_size), n_power_iterations=1)
         self._random_feature = RandomFeatureLinear(hidden_size, num_inducing)
@@ -464,6 +685,8 @@ class DN_GPLeNet(nn.Module):
         self.dummy = nn.Parameter(torch.empty(0))
         
         self.gp_input_scale = 1. / np.sqrt(gp_kernel_scale)
+        self.mean_field_factor = 1
+        
         self.gp_feature_scale = np.sqrt(2. / float(num_inducing))
         self.gp_output_bias = gp_output_bias
         self.scale_random_features = scale_random_features
@@ -541,17 +764,19 @@ class DN_GPLeNet(nn.Module):
      
     def forward(self, x, update_cov: bool = True, return_gp_cov: bool = True):
         
-        T=3/np.pi**2
-        T=1
         
         x = e2nn.GeometricTensor(x, self.input_type)
         
         x = self.conv1(x)
-        x = self.bn1(self.relu1(x))
+        x = self.relu1(x)
+        x = self.bn1(x.tensor)
+        x = e2nn.GeometricTensor(x, self.relu1.out_type)
         x = self.pool1(x)
         
         x = self.conv2(x)
-        x = self.bn2(self.relu2(x))
+        x = self.relu2(x)
+        x = self.bn2(x.tensor)
+        x = e2nn.GeometricTensor(x, self.relu2.out_type)
         x = self.pool2(x)
         
         x = self.gpool(x)
@@ -561,14 +786,15 @@ class DN_GPLeNet(nn.Module):
         
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
+        
             
         gp_feature, gp_output = self.gp_layer(x, update_cov=update_cov)
         gp_cov_matrix = self.compute_predictive_covariance(gp_feature)
         
-        if not (self.training):
-            sngp_variance = torch.sqrt(torch.linalg.diagonal(gp_cov_matrix)[:, None])
+
+        sngp_variance = torch.linalg.diagonal(gp_cov_matrix)[:, None]
             
-            gp_output[:] /= torch.sqrt(1 + T*sngp_variance[:])
+        gp_output[:] /= torch.sqrt(1 + self.mean_field_factor*sngp_variance[:])
             
         
         return gp_output, gp_cov_matrix
