@@ -249,6 +249,8 @@ class GPLeNet(nn.Module):
         x = F.relu(self.fc2(x))
         
         latent_features = x
+        latent_features = latent_features.detach().cpu().numpy()
+        np.savetxt("feature_space.csv", latent_features, delimiter=",")
         
         gp_feature, gp_output = self.gp_layer(x, update_cov=update_cov)
         gp_cov_matrix = self.compute_predictive_covariance(gp_feature)
@@ -366,7 +368,7 @@ class CN_GPLeNet(nn.Module):
     def __init__(self, in_chan, out_chan, imsize, kernel_size=5, N=8, 
                  hidden_size = 84,
                  gp_kernel_scale=0.1,
-                 num_inducing=1024,
+                 num_inducing=256,
                  gp_output_bias=0.,
                  layer_norm_eps=1e-12,
                  scale_random_features=True,
@@ -533,7 +535,9 @@ class CN_GPLeNet(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         
-        #latent_features = x
+        latent_features = x
+        latent_features = latent_features.detach().cpu().numpy()
+        np.savetxt("feature_space.csv", latent_features, delimiter=",")
         
         gp_feature, gp_output = self.gp_layer(x, update_cov=update_cov)
         gp_cov_matrix = self.compute_predictive_covariance(gp_feature)
@@ -684,8 +688,11 @@ class DN_GPLeNet(nn.Module):
         # dummy parameter for tracking device
         self.dummy = nn.Parameter(torch.empty(0))
         
-        self.gp_input_scale = 1. / np.sqrt(gp_kernel_scale)
-        self.mean_field_factor = 1
+        #self.gp_input_scale = nn.Parameter(torch.tensor(1/np.sqrt(gp_kernel_scale), dtype=torch.float32), requires_grad=False)
+        self.gp_input_scale = 1/np.sqrt(gp_kernel_scale)
+        self.mean_field_scalar= 1
+
+        #self.mean_field_scalar= nn.Parameter(torch.tensor(1, dtype=torch.float32),requires_grad=False)
         
         self.gp_feature_scale = np.sqrt(2. / float(num_inducing))
         self.gp_output_bias = gp_output_bias
@@ -794,7 +801,7 @@ class DN_GPLeNet(nn.Module):
 
         sngp_variance = torch.linalg.diagonal(gp_cov_matrix)[:, None]
             
-        gp_output[:] /= torch.sqrt(1 + self.mean_field_factor*sngp_variance[:])
+        gp_output[:] /= torch.sqrt(1 + self.mean_field_scalar*sngp_variance[:])
             
         
         return gp_output, gp_cov_matrix

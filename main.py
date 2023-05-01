@@ -9,7 +9,7 @@ import numpy as np
 import csv
 from PIL import Image
 
-from models import VanillaLeNet, CNSteerableLeNet, DNSteerableLeNet, DNRestrictedLeNet, GPLeNet, DN_GPLeNet
+from models import VanillaLeNet, CNSteerableLeNet, DNSteerableLeNet, DNRestrictedLeNet, GPLeNet, DN_GPLeNet, CN_GPLeNet
 from utils import *
 from FRDEEP import FRDEEPF
 from MiraBest import MBFRConfident
@@ -58,7 +58,7 @@ normalise= transforms.Normalize((config_dict['data']['datamean'],), (config_dict
 transform = transforms.Compose([
     crop,
     pad,
-    transforms.RandomRotation(360, interpolation=transforms.InterpolationMode.BILINEAR, expand=False),
+    transforms.RandomRotation(360, resample=Image.BILINEAR, expand=False),
     totensor,
     normalise,
 ])
@@ -96,7 +96,10 @@ if not quiet:
 # -----------------------------------------------------------------------------
 
 loss_function = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay= weight_decay)
+#model_params = [{'params': [p for p in model.parameters() if p is not model.gp_input_scale and p is not model.mean_field_scalar]}]
+#additional_params = [{'params': [model.gp_input_scale], 'lr': 0.1}, {'params': [model.mean_field_scalar], 'lr': 0.1}]
+#optimizer = torch.optim.Adam(model_params + additional_params)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer=optimizer, patience=2, factor=0.9)
 
 # -----------------------------------------------------------------------------
@@ -111,7 +114,7 @@ with open(csvfile, 'w+', newline="") as f_out:
 _bestacc = 0.
 for epoch in range(epochs):  # loop over the dataset multiple times
     
-    #model.reset_cov()
+    model.reset_cov()
     train_loss = train(model, train_loader, optimizer, device)
     test_loss, accuracy = test(model, test_loader, device)
         
@@ -120,7 +123,7 @@ for epoch in range(epochs):  # loop over the dataset multiple times
     scheduler.step(test_loss)
 
     # check early stopping criteria:
-    if early_stopping and accuracy>=_bestacc:
+    if early_stopping and accuracy>_bestacc:
         _bestacc = accuracy
         torch.save(model.state_dict(), modfile)
         best_acc = accuracy
